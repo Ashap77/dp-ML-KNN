@@ -240,7 +240,7 @@ if uploaded_file is not None:
             st.markdown("---")
             st.info("⚠️ **Disclaimer:** Hasil ini hanya untuk referensi dan bukan diagnosis medis. Selalu konsultasikan dengan tenaga medis profesional untuk diagnosis dan pengobatan yang tepat.")
 
-else:
+    
     # Welcome screen ketika belum upload file
     st.markdown("""
     ## 🚀 Cara Menggunakan Aplikasi
