@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-import plotly.graph_objects as go
+
 
 # Konfigurasi halaman
 st.set_page_config(
