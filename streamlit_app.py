@@ -1,335 +1,307 @@
 import streamlit as st
-
-import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-
 
 # Konfigurasi halaman
 st.set_page_config(
     page_title="Prediksi Risiko Penyakit Jantung",
     page_icon="❤️",
-    layout="wide"
+    layout="centered"
 )
 
-# CSS untuk styling
+# CSS Styling
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
+    .main-title {
         text-align: center;
-        color: #d63031;
+        color: #e74c3c;
+        font-size: 2.5rem;
         margin-bottom: 2rem;
     }
-    .risk-high {
-        background-color: #ff4757;
+    .result-high {
+        background: linear-gradient(90deg, #e74c3c, #c0392b);
         color: white;
-        padding: 1rem;
-        border-radius: 10px;
+        padding: 20px;
+        border-radius: 15px;
         text-align: center;
-        font-size: 1.5rem;
+        font-size: 1.8rem;
         font-weight: bold;
+        margin: 20px 0;
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
     }
-    .risk-low {
-        background-color: #2ed573;
+    .result-low {
+        background: linear-gradient(90deg, #27ae60, #229954);
         color: white;
-        padding: 1rem;
-        border-radius: 10px;
+        padding: 20px;
+        border-radius: 15px;
         text-align: center;
-        font-size: 1.5rem;
+        font-size: 1.8rem;
         font-weight: bold;
+        margin: 20px 0;
+        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
     }
-    .input-section {
-        background-color: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin: 1rem 0;
+    .input-container {
+        background: #f8f9fa;
+        padding: 25px;
+        border-radius: 15px;
+        margin: 20px 0;
+        border-left: 5px solid #3498db;
     }
-    .confidence-box {
-        background-color: #e3f2fd;
-        padding: 1rem;
+    .stSelectbox > div > div {
+        background-color: white;
         border-radius: 10px;
-        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Header
-st.markdown('<h1 class="main-header">❤️ Aplikasi Prediksi Risiko Penyakit Jantung</h1>', unsafe_allow_html=True)
-st.markdown("---")
+st.markdown('<h1 class="main-title">❤️ Prediksi Risiko Penyakit Jantung</h1>', unsafe_allow_html=True)
 
-# Sidebar untuk upload data dan konfigurasi
-st.sidebar.header("⚙️ Konfigurasi")
-
-# Upload CSV file
+# Sidebar untuk upload CSV
+st.sidebar.header("📁 Upload Dataset")
 uploaded_file = st.sidebar.file_uploader(
-    "Upload Dataset CSV", 
+    "Pilih file CSV",
     type=['csv'],
-    help="Upload file CSV yang berisi data referensi untuk klasifikasi"
+    help="Upload dataset dengan kolom binary (0/1) dan target di kolom terakhir"
 )
 
-# Input nilai K untuk KNN
-k_value = st.sidebar.slider("Nilai K untuk KNN", min_value=1, max_value=15, value=5, step=2)
+# Parameter KNN
+k_value = st.sidebar.slider("🎯 Nilai K untuk KNN", 3, 15, 5, 2)
 
-# Fungsi untuk memuat data
-@st.cache_data
-def load_data(file):
-    df = pd.read_csv(file)
-    return df
-
-# Fungsi untuk klasifikasi menggunakan KNN
-def classify_with_knn(input_data, reference_data, k_neighbors):
-    # Memisahkan fitur dan target dari data referensi
-    X_ref = reference_data.iloc[:, :-1].values  # Semua kolom kecuali yang terakhir
-    y_ref = reference_data.iloc[:, -1].values   # Kolom terakhir sebagai target
-    
-    # Membuat dan melatih model KNN
-    knn = KNeighborsClassifier(n_neighbors=k_neighbors)
-    knn.fit(X_ref, y_ref)
-    
-    # Prediksi untuk data input
-    input_array = np.array(input_data).reshape(1, -1)
-    prediction = knn.predict(input_array)[0]
-    prediction_proba = knn.predict_proba(input_array)[0]
-    
-    # Mencari tetangga terdekat untuk analisis
-    distances, indices = knn.kneighbors(input_array, n_neighbors=k_neighbors)
-    nearest_neighbors = reference_data.iloc[indices[0]]
-    
-    return prediction, prediction_proba, nearest_neighbors, distances[0]
-
-# Main application
 if uploaded_file is not None:
-    # Load data referensi
-    reference_df = load_data(uploaded_file)
-    
-    # Validasi data (harus berisi 0 dan 1)
-    if not all(reference_df.select_dtypes(include=[np.number]).isin([0, 1]).all()):
-        st.error("⚠️ Dataset harus berisi nilai 0 dan 1 saja!")
-        st.stop()
-    
-    # Display dataset info
-    with st.expander("📊 Informasi Dataset Referensi"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Data", len(reference_df))
-        with col2:
-            st.metric("Jumlah Fitur", len(reference_df.columns)-1)
-        with col3:
-            high_risk_count = sum(reference_df.iloc[:, -1] == 1)
-            st.metric("High Risk Cases", high_risk_count)
+    # Load dataset
+    try:
+        df = pd.read_csv(uploaded_file)
         
-        st.dataframe(reference_df.head(10))
+        # Validasi data binary
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        if not df[numeric_cols].isin([0, 1]).all().all():
+            st.error("⚠️ Dataset harus berisi nilai 0 dan 1 saja!")
+            st.stop()
         
-        # Distribusi target
-        target_counts = reference_df.iloc[:, -1].value_counts()
-        fig_dist = px.pie(values=target_counts.values, 
-                         names=['Low Risk (0)', 'High Risk (1)'],
-                         title="Distribusi Target dalam Dataset",
-                         color_discrete_map={'Low Risk (0)': '#2ed573', 'High Risk (1)': '#ff4757'})
-        st.plotly_chart(fig_dist, use_container_width=True)
-    
-    # Input form untuk klasifikasi
-    st.markdown("## 🔮 Input Data untuk Klasifikasi")
-    
-    feature_names = reference_df.columns[:-1]  # Semua kolom kecuali yang terakhir
-    target_name = reference_df.columns[-1]     # Kolom terakhir sebagai target
-    
-    with st.form("classification_form"):
-        st.markdown('<div class="input-section">', unsafe_allow_html=True)
-        st.markdown("### 📝 Masukkan Nilai 0 atau 1 untuk Setiap Faktor:")
+        # Info dataset di sidebar
+        st.sidebar.success(f"✅ Dataset loaded: {len(df)} rows")
+        st.sidebar.info(f"📊 Features: {len(df.columns)-1}")
         
-        input_data = {}
+        # Ambil nama kolom (kecuali kolom terakhir yang adalah target)
+        feature_columns = df.columns[:-1]
+        target_column = df.columns[-1]
         
-        # Membuat input dalam bentuk grid
-        num_cols = 3
-        cols = st.columns(num_cols)
+        # Input Section
+        st.markdown('<div class="input-container">', unsafe_allow_html=True)
+        st.markdown("### 📝 Masukkan Data Pasien")
+        st.markdown("*Pilih 0 (Tidak) atau 1 (Ya) untuk setiap faktor risiko*")
         
-        for i, feature in enumerate(feature_names):
-            with cols[i % num_cols]:
-                # Menampilkan nama fitur yang lebih readable
-                display_name = feature.replace('_', ' ').replace('.', ' ').title()
+        # Input form
+        with st.form("input_form"):
+            input_data = {}
+            
+            # Membuat 2 kolom untuk layout yang rapi
+            col1, col2 = st.columns(2)
+            
+            for i, feature in enumerate(feature_columns):
+                # Alternate between columns
+                current_col = col1 if i % 2 == 0 else col2
                 
-                input_data[feature] = st.selectbox(
-                    f"**{display_name}**",
-                    options=[0, 1],
-                    format_func=lambda x: "Tidak (0)" if x == 0 else "Ya (1)",
-                    key=f"input_{feature}",
-                    help=f"Pilih 0 (Tidak) atau 1 (Ya) untuk {display_name}"
-                )
+                with current_col:
+                    # Format nama feature untuk display
+                    display_name = feature.replace('_', ' ').replace('-', ' ').title()
+                    
+                    input_data[feature] = st.selectbox(
+                        f"**{display_name}**",
+                        options=[0, 1],
+                        format_func=lambda x: f"❌ Tidak ({x})" if x == 0 else f"✅ Ya ({x})",
+                        key=f"input_{feature}",
+                        help=f"Apakah pasien memiliki {display_name.lower()}?"
+                    )
+            
+            # Submit button
+            submit_button = st.form_submit_button(
+                "🔍 Analisis Risiko",
+                type="primary",
+                use_container_width=True
+            )
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        submitted = st.form_submit_button("🔍 Klasifikasi Risiko", type="primary", use_container_width=True)
-        
-        if submitted:
-            # Konversi input ke list
-            input_values = [input_data[feature] for feature in feature_names]
+        # Proses klasifikasi ketika form disubmit
+        if submit_button:
+            # Persiapkan data untuk klasifikasi
+            X = df[feature_columns].values  # Features dari dataset
+            y = df[target_column].values    # Target dari dataset
             
-            # Klasifikasi menggunakan KNN
-            try:
-                prediction, prediction_proba, neighbors, distances = classify_with_knn(
-                    input_values, reference_df, k_value
+            # Convert input ke array
+            input_array = np.array([list(input_data.values())])
+            
+            # Inisialisasi dan fit model KNN
+            knn = KNeighborsClassifier(n_neighbors=k_value)
+            knn.fit(X, y)
+            
+            # Prediksi
+            prediction = knn.predict(input_array)[0]
+            prediction_proba = knn.predict_proba(input_array)[0]
+            
+            # Cari tetangga terdekat
+            distances, indices = knn.kneighbors(input_array, n_neighbors=k_value)
+            
+            # Tampilkan hasil
+            st.markdown("---")
+            st.markdown("## 📊 Hasil Analisis")
+            
+            # Hasil prediksi utama
+            if prediction == 1:
+                st.markdown(
+                    '<div class="result-high">⚠️ RISIKO TINGGI<br><small>High Risk untuk Penyakit Jantung</small></div>',
+                    unsafe_allow_html=True
                 )
-                
-                # Menampilkan hasil
-                st.markdown("## 📋 Hasil Klasifikasi")
-                
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    if prediction == 1:
-                        st.markdown('<div class="risk-high">⚠️ HIGH RISK</div>', unsafe_allow_html=True)
-                        confidence = prediction_proba[1] * 100
-                        st.error(f"**Prediksi: RISIKO TINGGI**")
-                        st.write(f"Confidence: {confidence:.1f}%")
-                    else:
-                        st.markdown('<div class="risk-low">✅ LOW RISK</div>', unsafe_allow_html=True)
-                        confidence = prediction_proba[0] * 100
-                        st.success(f"**Prediksi: RISIKO RENDAH**")
-                        st.write(f"Confidence: {confidence:.1f}%")
-                
-                with col2:
-                    # Visualisasi probabilitas
-                    prob_df = pd.DataFrame({
-                        'Risk Level': ['Low Risk (0)', 'High Risk (1)'],
-                        'Probability': prediction_proba
-                    })
-                    
-                    fig_prob = px.bar(prob_df, x='Risk Level', y='Probability',
-                                    title='Probabilitas Klasifikasi',
-                                    color='Risk Level',
-                                    color_discrete_map={'Low Risk (0)': '#2ed573', 'High Risk (1)': '#ff4757'})
-                    fig_prob.update_layout(showlegend=False, yaxis_range=[0, 1])
-                    st.plotly_chart(fig_prob, use_container_width=True)
-                
-                # Detail analisis
-                st.markdown("## 🔍 Detail Analisis")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Data yang diinput
-                    st.markdown("### 📊 Data Input Anda:")
-                    input_display = pd.DataFrame({
-                        'Faktor Risiko': [name.replace('_', ' ').title() for name in feature_names],
-                        'Nilai': [f"{'Ya' if val == 1 else 'Tidak'} ({val})" for val in input_values]
-                    })
-                    st.dataframe(input_display, use_container_width=True)
-                
-                with col2:
-                    # Tetangga terdekat
-                    st.markdown(f"### 🎯 {k_value} Tetangga Terdekat:")
-                    neighbors_display = neighbors.copy()
-                    neighbors_display['Jarak'] = distances
-                    neighbors_display['Target'] = neighbors_display.iloc[:, -2].map({0: 'Low Risk', 1: 'High Risk'})
-                    st.dataframe(neighbors_display[['Target', 'Jarak']].round(3), use_container_width=True)
-                
-                # Confidence box
-                st.markdown(f'''
-                <div class="confidence-box">
-                    <h4>📊 Informasi Klasifikasi</h4>
-                    <p><strong>Algoritma:</strong> K-Nearest Neighbors (KNN)</p>
-                    <p><strong>K Value:</strong> {k_value}</p>
-                    <p><strong>Total Data Referensi:</strong> {len(reference_df)}</p>
-                    <p><strong>Confidence Score:</strong> {max(prediction_proba):.2%}</p>
-                </div>
-                ''', unsafe_allow_html=True)
-                
-                # Voting detail
-                with st.expander("🗳️ Detail Voting dari Tetangga Terdekat"):
-                    voting_detail = neighbors.iloc[:, -1].value_counts()
-                    st.write("**Hasil Voting:**")
-                    
-                    for risk_level, count in voting_detail.items():
-                        risk_name = "High Risk" if risk_level == 1 else "Low Risk"
-                        st.write(f"- {risk_name}: {count} votes")
-                    
-                    st.write(f"\n**Keputusan:** {'High Risk' if prediction == 1 else 'Low Risk'} (Mayoritas voting)")
-                
-                # Rekomendasi
-                st.markdown("## 💡 Rekomendasi")
-                if prediction == 1:
-                    st.warning("""
-                    **⚠️ Rekomendasi untuk Risiko Tinggi:**
-                    - 🏥 Konsultasi segera dengan dokter spesialis jantung
-                    - 🔬 Lakukan pemeriksaan EKG dan echocardiogram  
-                    - 📊 Pantau tekanan darah dan kolesterol secara rutin
-                    - 🥗 Ubah pola makan: kurangi garam, lemak jenuh, dan kolesterol
-                    - 🏃‍♂️ Olahraga teratur minimal 30 menit/hari
-                    - 🚭 Hindari merokok dan alkohol
-                    - 😌 Kelola stress dengan baik
-                    """)
-                else:
-                    st.info("""
-                    **✅ Rekomendasi untuk Risiko Rendah:**
-                    - 🎯 Pertahankan gaya hidup sehat saat ini
-                    - 📅 Pemeriksaan kesehatan rutin setahun sekali  
-                    - 💪 Lanjutkan olahraga teratur
-                    - 🥬 Konsumsi buah dan sayuran yang cukup
-                    - ⚖️ Jaga berat badan ideal
-                    - 😴 Istirahat yang cukup (7-8 jam/hari)
-                    - 🧘‍♀️ Kelola stress dengan baik
-                    """)
+                confidence = prediction_proba[1] * 100
+                st.error(f"**Tingkat Kepercayaan: {confidence:.1f}%**")
+            else:
+                st.markdown(
+                    '<div class="result-low">✅ RISIKO RENDAH<br><small>Low Risk untuk Penyakit Jantung</small></div>',
+                    unsafe_allow_html=True
+                )
+                confidence = prediction_proba[0] * 100
+                st.success(f"**Tingkat Kepercayaan: {confidence:.1f}%**")
             
-            except Exception as e:
-                st.error(f"Error dalam klasifikasi: {str(e)}")
+            # Detail analisis
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 📋 Data Input")
+                input_df = pd.DataFrame({
+                    'Faktor Risiko': [col.replace('_', ' ').title() for col in feature_columns],
+                    'Nilai': [f"{'Ya' if val == 1 else 'Tidak'}" for val in input_data.values()]
+                })
+                st.dataframe(input_df, hide_index=True, use_container_width=True)
+            
+            with col2:
+                st.markdown("### 🎯 Analisis KNN")
+                st.metric("K Neighbors", k_value)
+                st.metric("Dataset Size", len(df))
+                
+                # Voting dari tetangga
+                neighbor_targets = y[indices[0]]
+                high_risk_votes = sum(neighbor_targets == 1)
+                low_risk_votes = sum(neighbor_targets == 0)
+                
+                st.write("**Voting Tetangga:**")
+                st.write(f"• High Risk: {high_risk_votes} votes")
+                st.write(f"• Low Risk: {low_risk_votes} votes")
+            
+            # Progress bar untuk confidence
+            st.markdown("### 📈 Tingkat Kepercayaan")
+            st.progress(max(prediction_proba))
+            
+            # Rekomendasi
+            st.markdown("---")
+            st.markdown("## 💡 Rekomendasi")
+            
+            if prediction == 1:
+                st.warning("""
+                **⚠️ Untuk Risiko Tinggi:**
+                
+                🏥 **Segera konsultasi dokter spesialis jantung**
+                
+                📋 **Pemeriksaan yang disarankan:**
+                - EKG (Elektrokardiogram)
+                - Echocardiogram  
+                - Tes darah lengkap
+                - Tes tekanan darah 24 jam
+                
+                🎯 **Perubahan gaya hidup:**
+                - Diet rendah garam dan lemak
+                - Olahraga teratur (konsultasi dokter dulu)
+                - Berhenti merokok
+                - Kelola stress
+                - Kontrol berat badan
+                """)
+            else:
+                st.info("""
+                **✅ Untuk Risiko Rendah:**
+                
+                🎉 **Pertahankan kondisi kesehatan saat ini**
+                
+                📅 **Pemeriksaan rutin:**
+                - Check-up kesehatan tahunan
+                - Monitor tekanan darah
+                - Tes kolesterol berkala
+                
+                💪 **Gaya hidup sehat:**
+                - Olahraga teratur 30 menit/hari
+                - Diet seimbang dengan buah & sayur
+                - Tidur cukup 7-8 jam
+                - Hindari rokok dan alkohol berlebihan
+                - Kelola stress dengan baik
+                """)
+            
+            # Disclaimer
+            st.markdown("---")
+            st.info("⚠️ **Disclaimer:** Hasil ini hanya untuk referensi dan bukan diagnosis medis. Selalu konsultasikan dengan tenaga medis profesional untuk diagnosis dan pengobatan yang tepat.")
 
 else:
-    # Halaman welcome
+    # Welcome screen ketika belum upload file
     st.markdown("""
-    ## 🚀 Selamat Datang di Aplikasi Prediksi Penyakit Jantung
+    ## 🚀 Cara Menggunakan Aplikasi
     
-    Aplikasi ini menggunakan algoritma **K-Nearest Neighbors (KNN)** untuk mengklasifikasi risiko penyakit jantung 
-    berdasarkan faktor-faktor risiko biner (0/1) yang Anda masukkan.
+    ### 📤 Langkah 1: Upload Dataset
+    - Klik **"Browse files"** di sidebar
+    - Upload file CSV dengan format yang benar
+    - Dataset harus berisi nilai **0** dan **1** saja
     
-    ### 📋 Cara Menggunakan:
-    1. **Upload Dataset**: Unggah file CSV dengan data referensi di sidebar
-    2. **Input Data**: Masukkan nilai **0** (Tidak) atau **1** (Ya) untuk setiap faktor risiko
-    3. **Klasifikasi**: Klik tombol klasifikasi untuk mendapatkan hasil
-    4. **Lihat Hasil**: Dapatkan prediksi **High Risk** atau **Low Risk**
+    ### 📝 Langkah 2: Input Data
+    - Isi setiap faktor risiko dengan **0 (Tidak)** atau **1 (Ya)**
+    - Klik tombol **"Analisis Risiko"**
     
-    ### 📊 Format Dataset:
-    - File CSV dengan kolom berisi nilai **0** atau **1** saja
-    - Setiap baris = data pasien
-    - Kolom terakhir = target: **0** (Low Risk) atau **1** (High Risk)
+    ### 📊 Langkah 3: Lihat Hasil  
+    - Dapatkan hasil **High Risk** atau **Low Risk**
+    - Lihat tingkat kepercayaan dan rekomendasi
     
-    ### 🎯 Fitur Aplikasi:
-    - ✅ Input sederhana dengan pilihan 0/1
-    - ✅ Klasifikasi real-time menggunakan KNN
-    - ✅ Analisis tetangga terdekat
-    - ✅ Visualisasi probabilitas dan voting
-    - ✅ Rekomendasi berdasarkan hasil
+    ---
     
-    **Mulai dengan mengupload dataset Anda di sidebar!** 👈
+    ## 📋 Format Dataset CSV
+    
+    Dataset harus memiliki struktur seperti ini:
     """)
     
-    # Sample data format
-    with st.expander("📖 Contoh Format Dataset"):
-        sample_data = pd.DataFrame({
-            'age_over_50': [1, 1, 0, 1, 0],
-            'chest_pain': [1, 0, 1, 1, 0], 
-            'high_blood_pressure': [1, 1, 0, 1, 0],
-            'high_cholesterol': [1, 1, 0, 1, 0],
-            'smoking': [1, 1, 0, 1, 0],
-            'diabetes': [0, 1, 0, 1, 0],
-            'target': [1, 1, 0, 1, 0]  # 0=Low Risk, 1=High Risk
-        })
-        st.dataframe(sample_data)
-        st.caption("✅ Semua nilai harus 0 atau 1. Target: 0 = Low Risk, 1 = High Risk")
+    # Contoh format dataset
+    sample_df = pd.DataFrame({
+        'age_over_50': [1, 0, 1, 0, 1],
+        'chest_pain': [1, 0, 1, 1, 0],
+        'high_bp': [1, 0, 1, 0, 1], 
+        'cholesterol': [1, 1, 1, 0, 1],
+        'smoking': [1, 0, 1, 0, 0],
+        'diabetes': [0, 0, 1, 0, 1],
+        'target': [1, 0, 1, 0, 1]
+    })
+    
+    st.dataframe(sample_df, hide_index=True, use_container_width=True)
+    
+    st.markdown("""
+    **Keterangan:**
+    - Semua kolom kecuali **target** adalah faktor risiko (0 atau 1)
+    - **target**: 0 = Low Risk, 1 = High Risk
+    - Setiap baris adalah data satu pasien
+    
+    ---
+    
+    ## 🎯 Tentang Algoritma KNN
+    
+    Aplikasi ini menggunakan **K-Nearest Neighbors** untuk klasifikasi:
+    - Mencari tetangga terdekat dari data input Anda
+    - Melakukan voting berdasarkan K tetangga terdekat  
+    - Memberikan hasil klasifikasi High Risk/Low Risk
+    - Menampilkan tingkat kepercayaan prediksi
+    
+    **Mulai dengan upload dataset Anda di sidebar!** 👈
+    """)
 
 # Footer
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #74b9ff;'>
-    💙 Aplikasi Klasifikasi Risiko Penyakit Jantung - K-Nearest Neighbors
-    <br>
-    <small>⚠️ Hasil klasifikasi ini bukan diagnosis medis. Selalu konsultasikan dengan tenaga medis profesional.</small>
-</div>
-""", unsafe_allow_html=True)
-
-
+st.markdown(
+    '<div style="text-align: center; color: #7f8c8d; padding: 20px;">'
+    '💙 Aplikasi Prediksi Risiko Penyakit Jantung | Powered by K-Nearest Neighbors'
+    '</div>',
+    unsafe_allow_html=True
+)
